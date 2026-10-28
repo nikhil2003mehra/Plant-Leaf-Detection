@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: phytoscan_postgres
+    restart: always
+    environment:
+      - POSTGRES_DB=phytoscan_db
+      - POSTGRES_USER=phytoscan_user
+      - POSTGRES_PASSWORD=phytoscan_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U phytoscan_user -d phytoscan_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - phytoscan-network
+
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: phytoscan_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - DATABASE_URL=postgresql://phytoscan_user:phytoscan_password@postgres:5432/phytoscan_db
+    volumes:
+      - ./Backend:/app
+      - /app/venv
+    command: gunicorn --bind 0.0.0.0:8000 --reload app:app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - phytoscan-network
+
+  frontend:
+    build:
+      context: ./Front-end
+      dockerfile: Dockerfile
+    container_name: phytoscan_frontend
+    restart: always
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - phytoscan-network
+
+volumes:
+  postgres_data:
+
+networks:
+  phytoscan-network:
+    driver: bridge
